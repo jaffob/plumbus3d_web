@@ -1,5 +1,5 @@
 // Gameplay constants.
-var FPS = 10;
+var FPS = 60;
 var PI = Math.PI;
 
 // 2D drawing constants.
@@ -20,6 +20,10 @@ var walls = [
 {x1:500,y1:200,x2:500,y2:400}
 ];
 
+// Variables for input.
+var input_right = false, input_left = false;
+var input_forward = false, input_backward = false;
+
 function start()
 {
 	setInterval(run, 1000/FPS);
@@ -27,7 +31,30 @@ function start()
 
 function run()
 {
+	handleInput();
 	draw();
+}
+
+function handleInput()
+{
+	var df = player.vf * (1/FPS);
+	var dr = player.vr * (1/FPS);
+	
+	// Rotation.
+	if (input_left) player.dir -= dr;
+	if (input_right) player.dir += dr;
+	
+	// Walking.
+	if (input_forward)
+	{
+		player.x += df * Math.cos(player.dir);
+		player.y += df * Math.sin(player.dir);
+	}
+	if (input_backward)
+	{
+		player.x -= df * Math.cos(player.dir);
+		player.y -= df * Math.sin(player.dir);
+	}
 }
 
 function draw()
@@ -38,6 +65,8 @@ function draw()
 function draw2d(canvas_id)
 {
 	var c2d = document.getElementById(canvas_id).getContext("2d");
+	
+	c2d.clearRect(0, 0, canvas.width, canvas.height);
 	
 	// Draw player in 2D.
 	c2d.beginPath();
@@ -62,7 +91,52 @@ function draw2d(canvas_id)
 	}
 }
 
+/**
+ * Handle keys down.
+ */
 window.addEventListener('keydown', function(event)
 {
+	switch (event.keyCode)
+	{
+	// Rotation.
+	case 65:
+		input_left = true;
+		break;
+	case 68:
+		input_right = true;
+		break;
+		
+	// Forward-back movement.
+	case 87:
+		input_forward = true;
+		break;
+	case 83:
+		input_backward = true;
+		break;
+	}
+});
 
+/**
+ * Handle keys up.
+ */
+window.addEventListener('keyup', function(event)
+{
+	switch (event.keyCode)
+	{
+	// Rotation.
+	case 65:
+		input_left = false;
+		break;
+	case 68:
+		input_right = false;
+		break;
+		
+	// Forward-back movement.
+	case 87:
+		input_forward = false;
+		break;
+	case 83:
+		input_backward = false;
+		break;
+	}
 });
