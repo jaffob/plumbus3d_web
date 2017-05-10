@@ -1,9 +1,33 @@
-// Gameplay constants.
-var FPS = 60;
-var PI = Math.PI;
+// ***************************************
+//                CONSTANTS
+// ***************************************
 
-// 2D drawing constants.
+// Gameplay
+var FPS = 60;					// Framerate and update rate, per second.
+var PI = Math.PI;
+var SCREEN_WIDTH = 800			// Width of the canvas being drawn on.
+var SCREEN_HEIGHT = 600;		// Height of the canvas.
+
+// Player
+var FOV = PI/2;					// Player's field of view, in radians.					
+var PLAYER_HEIGHT = 50;			// Height of the player (i.e. how high the camera is).
+
+// World
+var WALL_HEIGHT = 100;
+
+// Colors
+var COLOR_GROUND = "#008000";
+var COLOR_SKY = "#00BFFF";
+var COLOR_WALL = "#000000";
+
+// 2D drawing
+
 var C2D_PLAYER_RADIUS = 10;
+
+
+// ***************************************
+//               VARIABLES
+// ***************************************
 
 // Define the player and its values.
 var player = {
@@ -32,7 +56,8 @@ function start()
 function run()
 {
 	handleInput();
-	draw();
+	draw("canvas");
+	draw2d("canvas2d");
 }
 
 function handleInput()
@@ -57,9 +82,27 @@ function handleInput()
 	}
 }
 
-function draw()
+function draw(canvas_id)
 {
-	draw2d("canvas2d");
+	var c = document.getElementById(canvas_id).getContext("2d");
+	
+	// Draw the sky and ground.
+	c.fillStyle = COLOR_SKY;
+	c.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT / 2);
+	c.fillStyle = COLOR_GROUND;
+	c.fillRect(0, SCREEN_HEIGHT / 2, SCREEN_WIDTH, SCREEN_HEIGHT);
+	
+	// Draw walls.
+	for (var i = 0; i < walls.length; i++)
+	{
+		drawWall(i);
+	}
+}
+
+function drawWall(wall_index)
+{
+	var wall = walls[i];
+	
 }
 
 function draw2d(canvas_id)
@@ -89,6 +132,23 @@ function draw2d(canvas_id)
 		c2d.lineTo(walls[i].x2, walls[i].y2);
 		c2d.stroke();
 	}
+}
+
+/**
+ * Converts an X,Y,Z coordinate in the world to a coordinate
+ * on the screen. For a point that is within the field of view,
+ * this is pretty simple: this returns the X,Y position where
+ * that point should be drawn on the screen.
+ * 
+ * For points outside of view, this returns where the point
+ * would be on a bigger screen.
+ */
+function worldToScreen(x, y, z)
+{
+	var result = {x: 0, y: 0};
+	
+	// Get the horizontal angle from the center of view (positive = to the right).
+	var abs_angle = Math.atan2(y - player.y, x - player.x);
 }
 
 /**
