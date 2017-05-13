@@ -155,19 +155,21 @@ function worldToScreen(x, y, z)
 	var abs_angle = Math.atan2(player.y - y, player.x - x) + PI;
 	var azimuth = Math.atan2(Math.sin(abs_angle - player.dir), Math.cos(abs_angle - player.dir));
 	
-	// Get the vertical angle (based on player height and distance, positive = up).
-	var elevation = Math.atan((z - PLAYER_HEIGHT) / distPoints(player.x, player.y, x, y));
+	// Get the vertical angle (based on player height and distance, positive = down).
+	var elevation = Math.atan((PLAYER_HEIGHT - z) / distPoints(player.x, player.y, x, y));
 	
-	console.log("elev " + elevation);
-}
-
-/**
- * Takes azimuth and elevation angles relative to the player's
- * center of view, as calculated by worldToScreen(). 
- */
-function angleToScreenRatio(azimuth, elevation)
-{
-
+	// Get our field of views.
+	var hfov = FOV;
+	var vfov = FOV * (SCREEN_HEIGHT / SCREEN_WIDTH);
+	
+	// Get the number of FOVs from the center along each axis.
+	var hratio = azimuth / hfov;
+	var vratio = elevation / vfov;
+	
+	// Calculate the result based on the screen size.
+	result.x = SCREEN_WIDTH * (hratio + 0.5);
+	result.y = SCREEN_HEIGHT * (vratio + 0.5);
+	return result;
 }
 
 /**
