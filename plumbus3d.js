@@ -66,8 +66,11 @@ function handleInput()
 	var dr = player.vr * (1/FPS);
 	
 	// Rotation.
-	if (input_left) player.dir -= dr;
-	if (input_right) player.dir += dr;
+	if (input_left) player.dir = (player.dir - dr) % (2*PI);
+	if (input_right) player.dir = (player.dir + dr) % (2*PI);
+	
+	// Mod in JavaScript is weird.
+	if (player.dir < 0) player.dir += 2*PI;
 	
 	// Walking.
 	if (input_forward)
@@ -97,12 +100,13 @@ function draw(canvas_id)
 	{
 		drawWall(i);
 	}
+	
+	worldToScreen(200, 200, PLAYER_HEIGHT);
 }
 
 function drawWall(wall_index)
 {
-	var wall = walls[i];
-	
+	var wall = walls[wall_index];
 }
 
 function draw2d(canvas_id)
@@ -148,7 +152,22 @@ function worldToScreen(x, y, z)
 	var result = {x: 0, y: 0};
 	
 	// Get the horizontal angle from the center of view (positive = to the right).
-	var abs_angle = Math.atan2(y - player.y, x - player.x);
+	var abs_angle = Math.atan2(player.y - y, player.x - x) + PI;
+	var azimuth = Math.atan2(Math.sin(abs_angle - player.dir), Math.cos(abs_angle - player.dir));
+	
+	// Get the vertical angle (based on player height and distance, positive = up).
+	var elevation = Math.atan((z - PLAYER_HEIGHT) / distPoints(player.x, player.y, x, y));
+	
+	console.log("elev " + elevation);
+}
+
+/**
+ * Takes azimuth and elevation angles relative to the player's
+ * center of view, as calculated by worldToScreen(). 
+ */
+function angleToScreenRatio(azimuth, elevation)
+{
+
 }
 
 /**
@@ -200,3 +219,8 @@ window.addEventListener('keyup', function(event)
 		break;
 	}
 });
+
+function distPoints(x1, y1, x2, y2)
+{
+	return Math.sqrt((x2-x1)*(x2-x1)+(y2-y1)*(y2-y1));
+}
