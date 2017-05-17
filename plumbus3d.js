@@ -98,15 +98,42 @@ function draw(canvas_id)
 	// Draw walls.
 	for (var i = 0; i < walls.length; i++)
 	{
-		drawWall(i);
+		drawWall(c, i);
 	}
-	
-	worldToScreen(200, 200, PLAYER_HEIGHT);
 }
 
-function drawWall(wall_index)
+function drawWall(c, wall_index)
 {
 	var wall = walls[wall_index];
+	
+	// Create arrays of angle sets and view coordinates, representing each wall corner.
+	var view_angles = [];
+	var view_coords = [];
+	
+	for (var i = 0; i < 2; i++)
+	{
+		// Push angles and coords for (x1,y1).
+		var va = worldCoordsToViewAngles(wall.x1, wall.y1, WALL_HEIGHT * i);
+		if (Math.abs(va.azimuth) > PI/2) return;
+		view_angles.push(va);
+		view_coords.push(viewAnglesToViewCoords(va));
+		
+		// Push angles and coords for (x2,y2).
+		va = worldCoordsToViewAngles(wall.x2, wall.y2, WALL_HEIGHT * i);
+		if (Math.abs(va.azimuth) > PI/2) return;
+		view_angles.push(va);
+		view_coords.push(viewAnglesToViewCoords(va));
+	}
+	
+	// Draw the wall from the coordinates found. This is a bit hardcoded because order is weird.
+	c.fillStyle = COLOR_WALL;
+	c.beginPath();
+	c.moveTo(view_coords[0].x, view_coords[0].y);
+	c.lineTo(view_coords[1].x, view_coords[1].y);
+	c.lineTo(view_coords[3].x, view_coords[3].y);
+	c.lineTo(view_coords[2].x, view_coords[2].y);
+	c.closePath();
+	c.fill();
 }
 
 function draw2d(canvas_id)
@@ -139,36 +166,46 @@ function draw2d(canvas_id)
 }
 
 /**
- * Converts an X,Y,Z coordinate in the world to a coordinate
- * on the screen. For a point that is within the field of view,
- * this is pretty simple: this returns the X,Y position where
- * that point should be drawn on the screen.
- * 
- * For points outside of view, this returns where the point
- * would be on a bigger screen.
+ * From an X,Y,Z coordinate in the world, calculates the
+ * angles of these points away from the center of the
+ * player's view. Returns an object containing azimuth
+ * and elevation angles.
  */
-function worldToScreen(x, y, z)
+function worldCoordsToViewAngles(x, y, z)
 {
-	var result = {x: 0, y: 0};
+	var result = {azimuth: 0, elevation: 0};
 	
 	// Get the horizontal angle from the center of view (positive = to the right).
 	var abs_angle = Math.atan2(player.y - y, player.x - x) + PI;
-	var azimuth = Math.atan2(Math.sin(abs_angle - player.dir), Math.cos(abs_angle - player.dir));
+	result.azimuth = Math.atan2(Math.sin(abs_angle - player.dir), Math.cos(abs_angle - player.dir));
 	
 	// Get the vertical angle (based on player height and distance, positive = down).
-	var elevation = Math.atan((PLAYER_HEIGHT - z) / distPoints(player.x, player.y, x, y));
+	result.elevation = Math.atan((PLAYER_HEIGHT - z) / distPoints(player.x, player.y, x, y));
+	
+	return result;
+}
+
+/**
+ * Given an object containing azimuth and elevation angles,
+ * calculates the point on the screen where this space should
+ * be drawn.
+ */
+function viewAnglesToViewCoords(viewAngles)
+{
+	var result = {x: 0, y: 0};
 	
 	// Get our field of views.
 	var hfov = FOV;
 	var vfov = FOV * (SCREEN_HEIGHT / SCREEN_WIDTH);
 	
 	// Get the number of FOVs from the center along each axis.
-	var hratio = azimuth / hfov;
-	var vratio = elevation / vfov;
+	var hratio = viewAngles.azimuth / hfov;
+	var vratio = viewAngles.elevation / vfov;
 	
 	// Calculate the result based on the screen size.
 	result.x = SCREEN_WIDTH * (hratio + 0.5);
 	result.y = SCREEN_HEIGHT * (vratio + 0.5);
+	
 	return result;
 }
 
