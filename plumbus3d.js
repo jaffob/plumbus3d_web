@@ -30,23 +30,30 @@ var C2D_PLAYER_RADIUS = 10;
 // ***************************************
 
 // Define the player and its values.
-var player = {
-
+var player =
+{
 	x: 400, y: 300,		// Current coordinates
 	dir: 0,				// Current direction in radians
 	vf: 200,			// Movement speed, per second
 	vr: PI				// Rotation speed, radians per second
-}
+};
 
 // Define the array of walls.
 var walls = [
 {x1:200,y1:200,x2:400,y2:200},
-{x1:500,y1:200,x2:500,y2:400}
+{x1:500,y1:200,x2:500,y2:400},
+{x1:400,y1:200,x2:200,y2:400}
 ];
 
 // Variables for input.
 var input_right = false, input_left = false;
 var input_forward = false, input_backward = false;
+
+// Engine flags.
+var flags = 
+{
+	SimpleDistance: false
+};
 
 function start()
 {
@@ -113,16 +120,16 @@ function drawWall(c, wall_index)
 	for (var i = 0; i < 2; i++)
 	{
 		// Push angles and coords for (x1,y1).
-		var va = worldCoordsToViewAngles(wall.x1, wall.y1, WALL_HEIGHT * i);
-		if (Math.abs(va.azimuth) > PI/2) return;
-		view_angles.push(va);
-		view_coords.push(viewAnglesToViewCoords(va));
+		var va1 = worldCoordsToViewAngles(wall.x1, wall.y1, WALL_HEIGHT * i);
+		view_angles.push(va1);
+		view_coords.push(viewAnglesToViewCoords(va1));
 		
 		// Push angles and coords for (x2,y2).
-		va = worldCoordsToViewAngles(wall.x2, wall.y2, WALL_HEIGHT * i);
-		if (Math.abs(va.azimuth) > PI/2) return;
-		view_angles.push(va);
-		view_coords.push(viewAnglesToViewCoords(va));
+		var va2 = worldCoordsToViewAngles(wall.x2, wall.y2, WALL_HEIGHT * i);
+		view_angles.push(va2);
+		view_coords.push(viewAnglesToViewCoords(va2));
+		
+		if (Math.abs(va1.azimuth) > FOV/2 && Math.abs(va2.azimuth) > FOV/2) return;
 	}
 	
 	// Draw the wall from the coordinates found. This is a bit hardcoded because order is weird.
@@ -180,7 +187,10 @@ function worldCoordsToViewAngles(x, y, z)
 	result.azimuth = Math.atan2(Math.sin(abs_angle - player.dir), Math.cos(abs_angle - player.dir));
 	
 	// Get the vertical angle (based on player height and distance, positive = down).
-	result.elevation = Math.atan((PLAYER_HEIGHT - z) / distPoints(player.x, player.y, x, y));
+	var distToWall = flags.SimpleDistance ?
+		distPoints(player.x, player.y, x, y) :
+		distToWallPoint(player.x, player.y, player.dir, x, y);
+	result.elevation = Math.atan((PLAYER_HEIGHT - z) / distToWall);
 	
 	return result;
 }
@@ -262,4 +272,17 @@ window.addEventListener('keyup', function(event)
 function distPoints(x1, y1, x2, y2)
 {
 	return Math.sqrt((x2-x1)*(x2-x1)+(y2-y1)*(y2-y1));
+}
+
+function distToWallPoint(px, py, pdir, wx, wy)
+{
+	// Define vector from player to wallpoint.
+	var dx = wx - px;
+	var dy = wy - py;
+	
+	dx *= Math.cos(pdir);
+	dy *= Math.sin(pdir);
+	
+	// Return magnitude of the resulting vector.
+	return Math.sqrt(dx*dx + dy*dy);
 }
