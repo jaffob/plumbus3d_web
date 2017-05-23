@@ -7,10 +7,9 @@ var FPS = 60;					// Framerate and update rate, per second.
 var PI = Math.PI;
 var SCREEN_WIDTH = 800			// Width of the canvas being drawn on.
 var SCREEN_HEIGHT = 600;		// Height of the canvas.
-
-// Player
-var FOV = PI/2;					// Player's field of view, in radians.					
-var PLAYER_HEIGHT = 50;			// Height of the player (i.e. how high the camera is).
+var FOV_CHANGE_RATE = PI/4;		// Change rate for FOV controls.
+var FOV_MIN = PI/32;
+var FOV_MAX = PI;
 
 // World
 var WALL_HEIGHT = 100;
@@ -23,7 +22,7 @@ var COLOR_WALL = "#000000";
 // 2D drawing
 
 var C2D_PLAYER_RADIUS = 10;
-
+var C2D_FOV_LINE_LENGTH = 250;
 
 // ***************************************
 //               VARIABLES
@@ -35,24 +34,39 @@ var player =
 	x: 400, y: 300,		// Current coordinates
 	dir: 0,				// Current direction in radians
 	vf: 200,			// Movement speed, per second
-	vr: PI				// Rotation speed, radians per second
+	vr: 3*PI/4,			// Rotation speed, radians per second
+	
+	fov: PI/2,			// Field of view, radians
+	height: 50			// Height off the ground of the camera
 };
 
 // Define the array of walls.
 var walls = [
 {x1:200,y1:200,x2:400,y2:200},
 {x1:500,y1:200,x2:500,y2:400},
-{x1:400,y1:200,x2:200,y2:400}
+//{x1:500,y1:250,x2:500,y2:350},
+{x1:400,y1:200,x2:200,y2:400},
+//{x1:350,y1:250,x2:250,y2:350}
 ];
 
 // Variables for input.
-var input_right = false, input_left = false;
-var input_forward = false, input_backward = false;
+var input =
+{
+	left: false,
+	right: false,
+	forward: false,
+	backward: false,
+	strafeleft: false,
+	straferight: false,
+	fovup: false,
+	fovdown: false,
+};
 
 // Engine flags.
 var flags = 
 {
-	SimpleDistance: false
+	SimpleDistance: false,
+	C2D_FOVLines: true
 };
 
 function start()
@@ -69,26 +83,48 @@ function run()
 
 function handleInput()
 {
-	var df = player.vf * (1/FPS);
-	var dr = player.vr * (1/FPS);
+	var df = player.vf / FPS;
+	var dr = player.vr / FPS;
 	
 	// Rotation.
-	if (input_left) player.dir = (player.dir - dr) % (2*PI);
-	if (input_right) player.dir = (player.dir + dr) % (2*PI);
+	if (input.left) player.dir = (player.dir - dr) % (2*PI);
+	if (input.right) player.dir = (player.dir + dr) % (2*PI);
 	
 	// Mod in JavaScript is weird.
 	if (player.dir < 0) player.dir += 2*PI;
 	
 	// Walking.
-	if (input_forward)
+	if (input.forward)
 	{
 		player.x += df * Math.cos(player.dir);
 		player.y += df * Math.sin(player.dir);
 	}
-	if (input_backward)
+	if (input.backward)
 	{
 		player.x -= df * Math.cos(player.dir);
 		player.y -= df * Math.sin(player.dir);
+	}
+	
+	// Strafing.
+	if (input.straferight)
+	{
+		player.x += df * Math.cos(player.dir + PI/2);
+		player.y += df * Math.sin(player.dir + PI/2);
+	}
+	if (input.strafeleft)
+	{
+		player.x -= df * Math.cos(player.dir + PI/2);
+		player.y -= df * Math.sin(player.dir + PI/2);
+	}
+	
+	// FOV changing.
+	if (input.fovup)
+	{
+		player.fov = Math.min(player.fov + FOV_CHANGE_RATE / FPS, FOV_MAX);
+	}
+	if (input.fovdown)
+	{
+		player.fov = Math.max(player.fov - FOV_CHANGE_RATE / FPS, FOV_MIN);
 	}
 }
 
@@ -129,7 +165,7 @@ function drawWall(c, wall_index)
 		view_angles.push(va2);
 		view_coords.push(viewAnglesToViewCoords(va2));
 		
-		if (Math.abs(va1.azimuth) > FOV/2 && Math.abs(va2.azimuth) > FOV/2) return;
+		if (Math.abs(va1.azimuth) > player.fov/2 && Math.abs(va2.azimuth) > player.fov/2) return;
 	}
 	
 	// Draw the wall from the coordinates found. This is a bit hardcoded because order is weird.
@@ -148,6 +184,15 @@ function draw2d(canvas_id)
 	var c2d = document.getElementById(canvas_id).getContext("2d");
 	
 	c2d.clearRect(0, 0, canvas.width, canvas.height);
+	
+	// Draw FOV lines if requested.
+	c2d.strokeStyle = "#808080";
+	c2d.moveTo(player.x, player.y);
+	c2d.lineTo(player.x + C2D_FOV_LINE_LENGTH * Math.cos(player.dir + player.fov/2), player.y + C2D_FOV_LINE_LENGTH * Math.sin(player.dir + player.fov/2));
+	c2d.stroke();
+	c2d.moveTo(player.x, player.y);
+	c2d.lineTo(player.x + C2D_FOV_LINE_LENGTH * Math.cos(player.dir - player.fov/2), player.y + C2D_FOV_LINE_LENGTH * Math.sin(player.dir - player.fov/2));
+	c2d.stroke();
 	
 	// Draw player in 2D.
 	c2d.beginPath();
@@ -190,7 +235,7 @@ function worldCoordsToViewAngles(x, y, z)
 	var distToWall = flags.SimpleDistance ?
 		distPoints(player.x, player.y, x, y) :
 		distToWallPoint(player.x, player.y, player.dir, x, y);
-	result.elevation = Math.atan((PLAYER_HEIGHT - z) / distToWall);
+	result.elevation = Math.atan((player.height - z) / distToWall);
 	
 	return result;
 }
@@ -205,8 +250,8 @@ function viewAnglesToViewCoords(viewAngles)
 	var result = {x: 0, y: 0};
 	
 	// Get our field of views.
-	var hfov = FOV;
-	var vfov = FOV * (SCREEN_HEIGHT / SCREEN_WIDTH);
+	var hfov = player.fov;
+	var vfov = player.fov * (SCREEN_HEIGHT / SCREEN_WIDTH);
 	
 	// Get the number of FOVs from the center along each axis.
 	var hratio = viewAngles.azimuth / hfov;
@@ -228,18 +273,34 @@ window.addEventListener('keydown', function(event)
 	{
 	// Rotation.
 	case 65:
-		input_left = true;
+		input.left = true;
 		break;
 	case 68:
-		input_right = true;
+		input.right = true;
 		break;
 		
 	// Forward-back movement.
 	case 87:
-		input_forward = true;
+		input.forward = true;
 		break;
 	case 83:
-		input_backward = true;
+		input.backward = true;
+		break;
+	
+	// Strafe.
+	case 75:
+		input.strafeleft = true;
+		break;
+	case 76:
+		input.straferight = true;
+		break;
+	
+	// Change FOV.
+	case 79:
+		input.fovdown = true;
+		break;
+	case 80:
+		input.fovup = true;
 		break;
 	}
 });
@@ -253,18 +314,34 @@ window.addEventListener('keyup', function(event)
 	{
 	// Rotation.
 	case 65:
-		input_left = false;
+		input.left = false;
 		break;
 	case 68:
-		input_right = false;
+		input.right = false;
 		break;
 		
 	// Forward-back movement.
 	case 87:
-		input_forward = false;
+		input.forward = false;
 		break;
 	case 83:
-		input_backward = false;
+		input.backward = false;
+		break;
+		
+	// Strafe.
+	case 75:
+		input.strafeleft = false;
+		break;
+	case 76:
+		input.straferight = false;
+		break;
+	
+	// Change FOV.
+	case 79:
+		input.fovdown = false;
+		break;
+	case 80:
+		input.fovup = false;
 		break;
 	}
 });
