@@ -346,6 +346,10 @@ window.addEventListener('keyup', function(event)
 	}
 });
 
+// ***************************************
+//           HELPER FUNCTIONS
+// ***************************************
+
 function distPoints(x1, y1, x2, y2)
 {
 	return Math.sqrt((x2-x1)*(x2-x1)+(y2-y1)*(y2-y1));
@@ -355,11 +359,64 @@ function distToWallPoint(px, py, pdir, wx, wy)
 {
 	// Define vector from player to wallpoint.
 	var dx = wx - px;
-	var dy = wy - py;
 	
+	var dy = wy - py;
 	dx *= Math.cos(pdir);
 	dy *= Math.sin(pdir);
 	
 	// Return magnitude of the resulting vector.
 	return Math.sqrt(dx*dx + dy*dy);
+}
+
+/**
+ * Calculates the point of intersection between two lines, given
+ * in point-slope form. Probably not the cleanest math, but ehh.
+ */
+function intersectLines(x1, y1, m1, x2, y2, m2)
+{
+	// If the slopes are the same, they're parallel.
+	if (m1 == m2)
+		return null;
+		
+	var result = {x: 0, y: 0};
+	
+	// I solved point-slope equations on paper and got this.
+	result.x = (m1*x1 - m2*x2 + y2 - y1) / (m1 - m2);
+	result.y = m1 * (result.x - x1) + y1;
+	
+	return result;
+}
+
+/**
+ * Calculates the point of intersection between two lines, one of
+ * which is in point slope form and one of which is vertical.
+ */
+function intersectLineVertical(x1, y1, m1, x2)
+{
+	return {x: x2, y: m1 * (x2 - x1) + y1};
+}
+
+/**
+ * Gets the point where a line (defined by two points) intersects
+ * with a line extended from a point and angle. This will extend
+ * both lines indefinitely.
+ */
+function intersectLineAngle(ax, ay, adir, lx1, ly1, lx2, ly2)
+{
+	// Both lines are vertical.
+	if (lx2 - lx1 == 0 && (adir + PI/2) % PI == 0)
+		return null;
+		
+	// The two-point line is vertical
+	if (lx2 - lx1 == 0)
+		return intersectLineVertical(ax, ay, Math.tan(adir), lx1);
+	
+	var lm = (ly2 - ly1) / (lx2 - lx1);
+	
+	// The angle line is vertical.
+	if ((adir + PI/2) % PI == 0)
+		return intersectLineVertical(lx1, ly1, lm, ax);
+	
+	// Otherwise, do a standard point-slope intersection.
+	return intersectLines(ax, ay, Math.tan(adir), lx1, ly1, lm);
 }
