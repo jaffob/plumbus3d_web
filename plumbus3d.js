@@ -157,11 +157,25 @@ function drawWall(c, wall_index)
 	{
 		// Push angles and coords for (x1,y1).
 		var va1 = worldCoordsToViewAngles(wall.x1, wall.y1, WALL_HEIGHT * i);
+		if (Math.abs(va1.azimuth) > player.fov / 2)
+		{
+			var fovdir = player.dir + (player.fov / 2) * (va1.azimuth / Math.abs(va1.azimuth));
+			var newxy = intersectLineAngle(player.x, player.y, fovdir, wall.x1, wall.y1, wall.x2, wall.y2);
+			va1 = worldCoordsToViewAngles(newxy.x, newxy.y, WALL_HEIGHT * i);
+		}
+		
 		view_angles.push(va1);
 		view_coords.push(viewAnglesToViewCoords(va1));
 		
 		// Push angles and coords for (x2,y2).
 		var va2 = worldCoordsToViewAngles(wall.x2, wall.y2, WALL_HEIGHT * i);
+		if (Math.abs(va2.azimuth) > player.fov / 2)
+		{
+			var fovdir = player.dir + (player.fov / 2) * (va2.azimuth / Math.abs(va2.azimuth));
+			var newxy = intersectLineAngle(player.x, player.y, fovdir, wall.x1, wall.y1, wall.x2, wall.y2);
+			va2 = worldCoordsToViewAngles(newxy.x, newxy.y, WALL_HEIGHT * i);
+		}
+		
 		view_angles.push(va2);
 		view_coords.push(viewAnglesToViewCoords(va2));
 		
