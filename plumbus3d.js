@@ -5,7 +5,7 @@
 // Gameplay
 var FPS = 60;					// Framerate and update rate, per second.
 var PI = Math.PI;
-var SCREEN_WIDTH = 800			// Width of the canvas being drawn on.
+var SCREEN_WIDTH = 800;			// Width of the canvas being drawn on.
 var SCREEN_HEIGHT = 600;		// Height of the canvas.
 var FOV_CHANGE_RATE = PI/4;		// Change rate for FOV controls.
 var FOV_MIN = PI/32;
@@ -44,9 +44,7 @@ var player =
 var walls = [
 {x1:200,y1:200,x2:400,y2:200},
 {x1:500,y1:200,x2:500,y2:400},
-//{x1:500,y1:250,x2:500,y2:350},
 {x1:400,y1:200,x2:200,y2:400},
-//{x1:350,y1:250,x2:250,y2:350}
 ];
 
 // Variables for input.
@@ -66,6 +64,7 @@ var input =
 var flags = 
 {
 	SimpleDistance: false,
+	wallEndpointCorrection: 2,
 	C2D_FOVLines: true
 };
 
@@ -157,24 +156,14 @@ function drawWall(c, wall_index)
 	{
 		// Push angles and coords for (x1,y1).
 		var va1 = worldCoordsToViewAngles(wall.x1, wall.y1, WALL_HEIGHT * i);
-		if (Math.abs(va1.azimuth) > player.fov / 2)
-		{
-			var fovdir = player.dir + (player.fov / 2) * (va1.azimuth / Math.abs(va1.azimuth));
-			var newxy = intersectLineAngle(player.x, player.y, fovdir, wall.x1, wall.y1, wall.x2, wall.y2);
-			va1 = worldCoordsToViewAngles(newxy.x, newxy.y, WALL_HEIGHT * i);
-		}
+		va1 = correctOutOfViewAngles(va1, wall, WALL_HEIGHT * i);
 		
 		view_angles.push(va1);
 		view_coords.push(viewAnglesToViewCoords(va1));
 		
 		// Push angles and coords for (x2,y2).
 		var va2 = worldCoordsToViewAngles(wall.x2, wall.y2, WALL_HEIGHT * i);
-		if (Math.abs(va2.azimuth) > player.fov / 2)
-		{
-			var fovdir = player.dir + (player.fov / 2) * (va2.azimuth / Math.abs(va2.azimuth));
-			var newxy = intersectLineAngle(player.x, player.y, fovdir, wall.x1, wall.y1, wall.x2, wall.y2);
-			va2 = worldCoordsToViewAngles(newxy.x, newxy.y, WALL_HEIGHT * i);
-		}
+		va2 = correctOutOfViewAngles(va2, wall, WALL_HEIGHT * i);
 		
 		view_angles.push(va2);
 		view_coords.push(viewAnglesToViewCoords(va2));
@@ -229,53 +218,6 @@ function draw2d(canvas_id)
 		c2d.lineTo(walls[i].x2, walls[i].y2);
 		c2d.stroke();
 	}
-}
-
-/**
- * From an X,Y,Z coordinate in the world, calculates the
- * angles of these points away from the center of the
- * player's view. Returns an object containing azimuth
- * and elevation angles.
- */
-function worldCoordsToViewAngles(x, y, z)
-{
-	var result = {azimuth: 0, elevation: 0};
-	
-	// Get the horizontal angle from the center of view (positive = to the right).
-	var abs_angle = Math.atan2(player.y - y, player.x - x) + PI;
-	result.azimuth = Math.atan2(Math.sin(abs_angle - player.dir), Math.cos(abs_angle - player.dir));
-	
-	// Get the vertical angle (based on player height and distance, positive = down).
-	var distToWall = flags.SimpleDistance ?
-		distPoints(player.x, player.y, x, y) :
-		distToWallPoint(player.x, player.y, player.dir, x, y);
-	result.elevation = Math.atan((player.height - z) / distToWall);
-	
-	return result;
-}
-
-/**
- * Given an object containing azimuth and elevation angles,
- * calculates the point on the screen where this space should
- * be drawn.
- */
-function viewAnglesToViewCoords(viewAngles)
-{
-	var result = {x: 0, y: 0};
-	
-	// Get our field of views.
-	var hfov = player.fov;
-	var vfov = player.fov * (SCREEN_HEIGHT / SCREEN_WIDTH);
-	
-	// Get the number of FOVs from the center along each axis.
-	var hratio = viewAngles.azimuth / hfov;
-	var vratio = viewAngles.elevation / vfov;
-	
-	// Calculate the result based on the screen size.
-	result.x = SCREEN_WIDTH * (hratio + 0.5);
-	result.y = SCREEN_HEIGHT * (vratio + 0.5);
-	
-	return result;
 }
 
 /**
@@ -361,20 +303,127 @@ window.addEventListener('keyup', function(event)
 });
 
 // ***************************************
+//       WORLD/TRANSFORM FUNCTIONS
+// ***************************************
+
+/* Note: I distinguish these functions from helper functions because
+   they reference the player object. */
+   
+/**
+ * From an X,Y,Z coordinate in the world, calculates the
+ * angles of these points away from the center of the
+ * player's view. Returns an object containing azimuth
+ * and elevation angles.
+ */
+function worldCoordsToViewAngles(x, y, z)
+{
+	var result = {azimuth: 0, elevation: 0};
+	
+	// Get the horizontal angle from the center of view (positive = to the right).
+	var abs_angle = Math.atan2(player.y - y, player.x - x) + PI;
+	result.azimuth = Math.atan2(Math.sin(abs_angle - player.dir), Math.cos(abs_angle - player.dir));
+	
+	// Get the vertical angle (based on player height and distance, positive = down).
+	var distToWall = flags.SimpleDistance ?
+		distPoints(player.x, player.y, x, y) :
+		distToWallPoint(player.x, player.y, player.dir, x, y);
+	result.elevation = Math.atan((player.height - z) / distToWall);
+	
+	return result;
+}
+
+/**
+ * The elevation angle returned by worldCoordsToViewAngles()
+ * is not useful when the point in question is out of the
+ * player's view (that is, azimuth is greater than half the FOV).
+ * Given a view angle structure, this function checks if the
+ * original point is in view based on the azimuth angle. If not,
+ * it calls worldCoordsToViewAngles() again, this time on the
+ * part of the wall that is right at the edge of the player's view.
+ * This guarantees the correct elevation angle will be used.
+ */
+function correctOutOfViewAngles(viewAngles, wall, z)
+{
+	if (flags.wallEndpointCorrection > 0 && Math.abs(viewAngles.azimuth) > player.fov / 2)
+	{
+		// Get the angle of the edge of the player's vision, on the side of the player
+		// that this wall point is.
+		var fovdir = player.dir + (player.fov / 2) * (viewAngles.azimuth > 0 ? 1 : -1);
+
+		// Calculate where the line that scrapes the edge of the player's vision meets
+		// the wall. Then, calculate the azimuth angle from the center of the player's
+		// vision to that point on the wall.
+		var wallpoint = intersectLineAngle(player.x, player.y, fovdir, wall.x1, wall.y1, wall.x2, wall.y2);
+		var wallpoint_abs_angle = Math.atan2(player.y - wallpoint.y, player.x - wallpoint.x) + PI;
+		var wallpoint_azimuth = Math.atan2(Math.sin(wallpoint_abs_angle - player.dir), Math.cos(wallpoint_abs_angle - player.dir));
+		
+		// If the azimuth is greater than it should be, we used the wrong side of the
+		// player's vision. Re-calculate using the other side. Note: we divide by 1.999
+		// instead of 2 here because floats aren't that sick.
+		if (flags.wallEndpointCorrection == 2 && Math.abs(wallpoint_azimuth) > player.fov / 1.999)
+		{
+			fovdir = player.dir + (player.fov / 2) * (viewAngles.azimuth > 0 ? -1 : 1);
+			wallpoint = intersectLineAngle(player.x, player.y, fovdir, wall.x1, wall.y1, wall.x2, wall.y2);
+		}
+		
+		if (wallpoint == null)
+			return viewAngles;
+
+		return worldCoordsToViewAngles(wallpoint.x, wallpoint.y, z);
+	}
+	
+	return viewAngles;
+}
+
+/**
+ * Given an object containing azimuth and elevation angles,
+ * calculates the point on the screen where this space should
+ * be drawn.
+ */
+function viewAnglesToViewCoords(viewAngles)
+{
+	var result = {x: 0, y: 0};
+	
+	// Get our field of views.
+	var hfov = player.fov;
+	var vfov = player.fov * (SCREEN_HEIGHT / SCREEN_WIDTH);
+	
+	// Get the number of FOVs from the center along each axis.
+	var hratio = viewAngles.azimuth / hfov;
+	var vratio = viewAngles.elevation / vfov;
+	
+	// Calculate the result based on the screen size.
+	result.x = SCREEN_WIDTH * (hratio + 0.5);
+	result.y = SCREEN_HEIGHT * (vratio + 0.5);
+	
+	return result;
+}
+
+// ***************************************
 //           HELPER FUNCTIONS
 // ***************************************
 
+/**
+ * Basic Pythagorean distance between two points.
+ */
 function distPoints(x1, y1, x2, y2)
 {
 	return Math.sqrt((x2-x1)*(x2-x1)+(y2-y1)*(y2-y1));
 }
 
+/**
+ * Returns the distance to a point from a position, given a
+ * particular view angle. For example, if the player is facing
+ * directly to the right, this would return Abs(wx - px) (and not
+ * account for Y positions of points at all). This function does
+ * a similar calculation but for any direction.
+ */
 function distToWallPoint(px, py, pdir, wx, wy)
 {
 	// Define vector from player to wallpoint.
 	var dx = wx - px;
-	
 	var dy = wy - py;
+	
 	dx *= Math.cos(pdir);
 	dy *= Math.sin(pdir);
 	
@@ -384,7 +433,8 @@ function distToWallPoint(px, py, pdir, wx, wy)
 
 /**
  * Calculates the point of intersection between two lines, given
- * in point-slope form. Probably not the cleanest math, but ehh.
+ * in point-slope form. Slopes are given as actual slopes, not angles.
+ * Returns an {x, y} JSON structure.
  */
 function intersectLines(x1, y1, m1, x2, y2, m2)
 {
@@ -404,6 +454,7 @@ function intersectLines(x1, y1, m1, x2, y2, m2)
 /**
  * Calculates the point of intersection between two lines, one of
  * which is in point slope form and one of which is vertical.
+ * Returns an {x, y} JSON structure.
  */
 function intersectLineVertical(x1, y1, m1, x2)
 {
@@ -413,7 +464,7 @@ function intersectLineVertical(x1, y1, m1, x2)
 /**
  * Gets the point where a line (defined by two points) intersects
  * with a line extended from a point and angle. This will extend
- * both lines indefinitely.
+ * both lines indefinitely. Returns an {x, y} JSON structure.
  */
 function intersectLineAngle(ax, ay, adir, lx1, ly1, lx2, ly2)
 {
