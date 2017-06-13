@@ -42,8 +42,8 @@ var player =
 
 // Define the array of walls.
 var walls = [
-{x1:200,y1:200,x2:300,y2:200,h:100,color:"#FF0000"},
-//{x1:500,y1:200,x2:500,y2:400,h:100,color:"#00FF00"},
+{x1:200,y1:200,x2:400,y2:200,h:100,color:"#FF0000"},
+{x1:500,y1:200,x2:500,y2:400,h:100,color:"#00FF00"},
 {x1:400,y1:200,x2:200,y2:400,h:100,color:"#0000FF"},
 ];
 
@@ -305,25 +305,25 @@ function calcWallObscurity(wall1, wall2)
 	var aw2p1 = azimuthAngle(player.x, player.y, player.dir, wall2.x1, wall2.y1);
 	var aw2p2 = azimuthAngle(player.x, player.y, player.dir, wall2.x2, wall2.y2);
 	
-	var output = calcWallObs_Check(aw1p1, aw2p1, aw2p2, wall1, wall2);
+	var output = calcWallObs_Check(aw1p1, aw2p1, aw2p2, wall1.x1, wall1.y1, wall1, wall2);
 	if (output != 0) return output;
 	
-	output = calcWallObs_Check(aw1p2, aw2p1, aw2p2, wall1, wall2);
+	output = calcWallObs_Check(aw1p2, aw2p1, aw2p2, wall1.x2, wall1.y2, wall1, wall2);
 	if (output != 0) return output;
 	
-	output = calcWallObs_Check(aw2p1, aw1p1, aw1p2, wall2, wall1);
+	output = calcWallObs_Check(aw2p1, aw1p1, aw1p2, wall2.x1, wall2.y1, wall2, wall1);
 	if (output != 0) return -output;
 	
-	output = calcWallObs_Check(aw2p2, aw1p1, aw1p2, wall2, wall1);
+	output = calcWallObs_Check(aw2p2, aw1p1, aw1p2, wall2.x2, wall2.y2,  wall2, wall1);
 	return -output;
 }
 
-function calcWallObs_Check(a11, a21, a22, wall1, wall2)
+function calcWallObs_Check(a11, a21, a22, px, py, wall1, wall2)
 {
-	if ((a11 <= a21 && a11 >= a22) || (a11 >= a21 && a11 <= a22))
+	if ((a11 < a21 && a11 > a22) || (a11 > a21 && a11 < a22))
 	{
 		// Get the distances to wall 1 point 1, and where the line extended through there meets wall 2.
-		var dw1 = distPoints(player.x, player.y, wall1.x1, wall1.y1);
+		var dw1 = distPoints(player.x, player.y, px, py);
 		var intersectw2 = intersectLineAngle(player.x, player.y, player.dir + a11, wall2.x1, wall2.y1, wall2.x2, wall2.y2);
 		var dw2 = distPoints(player.x, player.y, intersectw2.x, intersectw2.y);
 		
