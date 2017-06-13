@@ -12,12 +12,12 @@ var FOV_MIN = PI/32;
 var FOV_MAX = PI;
 
 // World
-var WALL_HEIGHT = 100;
+var WALL_HEIGHT_DEFAULT = 100;
 
 // Colors
 var COLOR_GROUND = "#008000";
 var COLOR_SKY = "#00BFFF";
-var COLOR_WALL = "#000000";
+var COLOR_WALL_DEFAULT = "#000000";
 
 // 2D drawing
 
@@ -42,9 +42,9 @@ var player =
 
 // Define the array of walls.
 var walls = [
-{x1:200,y1:200,x2:400,y2:200},
-{x1:500,y1:200,x2:500,y2:400},
-{x1:400,y1:200,x2:200,y2:400},
+{x1:200,y1:200,x2:400,y2:200,h:100,color:"#FF0000"},
+{x1:500,y1:200,x2:500,y2:400,h:100,color:"#00FF00"},
+{x1:400,y1:200,x2:200,y2:400,h:100,color:"#0000FF"},
 ];
 
 // Variables for input.
@@ -65,8 +65,14 @@ var flags =
 {
 	SimpleDistance: false,
 	wallEndpointCorrection: 2,
+	basicMode: false,
 	C2D_FOVLines: true
 };
+
+
+// ***************************************
+//            STARTUP/ENGINE
+// ***************************************
 
 function start()
 {
@@ -127,6 +133,11 @@ function handleInput()
 	}
 }
 
+
+// ***************************************
+//                DRAWING
+// ***************************************
+
 function draw(canvas_id)
 {
 	var c = document.getElementById(canvas_id).getContext("2d");
@@ -137,33 +148,49 @@ function draw(canvas_id)
 	c.fillStyle = COLOR_GROUND;
 	c.fillRect(0, SCREEN_HEIGHT / 2, SCREEN_WIDTH, SCREEN_HEIGHT);
 	
-	// Draw walls.
-	for (var i = 0; i < walls.length; i++)
+	// Draw walls. In basic mode, just draw each wall in no particular order (and hence with no color).
+	if (flags.basicMode)
 	{
-		drawWall(c, i);
+		for (var i = 0; i < walls.length; i++)
+		{
+			drawWall(c, i);
+		}
+	}
+	else
+	{
+		var drawOrder = calcDrawOrder();
+		for (var i = 0; i < drawOrder.length; i++)
+		{
+			drawWall(c, drawOrder[i]);
+		}
 	}
 }
 
 function drawWall(c, wall_index)
 {
 	var wall = walls[wall_index];
-	
+	var wallheight = wall.h == undefined ? WALL_HEIGHT_DEFAULT : wall.h;
 	// Create arrays of angle sets and view coordinates, representing each wall corner.
 	var view_angles = [];
 	var view_coords = [];
 	
+	if (wallIsBehindPlayer(wall))
+	{
+		return;
+	}
+	
 	for (var i = 0; i < 2; i++)
 	{
 		// Push angles and coords for (x1,y1).
-		var va1 = worldCoordsToViewAngles(wall.x1, wall.y1, WALL_HEIGHT * i);
-		va1 = correctOutOfViewAngles(va1, wall, WALL_HEIGHT * i);
+		var va1 = worldCoordsToViewAngles(wall.x1, wall.y1, wallheight * i);
+		va1 = correctOutOfViewAngles(va1, wall, wallheight * i);
 		
 		view_angles.push(va1);
 		view_coords.push(viewAnglesToViewCoords(va1));
 		
 		// Push angles and coords for (x2,y2).
-		var va2 = worldCoordsToViewAngles(wall.x2, wall.y2, WALL_HEIGHT * i);
-		va2 = correctOutOfViewAngles(va2, wall, WALL_HEIGHT * i);
+		var va2 = worldCoordsToViewAngles(wall.x2, wall.y2, wallheight * i);
+		va2 = correctOutOfViewAngles(va2, wall, wallheight * i);
 		
 		view_angles.push(va2);
 		view_coords.push(viewAnglesToViewCoords(va2));
@@ -171,8 +198,12 @@ function drawWall(c, wall_index)
 		if (Math.abs(va1.azimuth) > player.fov/2 && Math.abs(va2.azimuth) > player.fov/2) return;
 	}
 	
+	// Determine wall color.
+	c.fillStyle = COLOR_WALL_DEFAULT;
+	if (!flags.basicMode && wall.color != undefined)
+		c.fillStyle = wall.color;
+		
 	// Draw the wall from the coordinates found. This is a bit hardcoded because order is weird.
-	c.fillStyle = COLOR_WALL;
 	c.beginPath();
 	c.moveTo(view_coords[0].x, view_coords[0].y);
 	c.lineTo(view_coords[1].x, view_coords[1].y);
@@ -219,6 +250,113 @@ function draw2d(canvas_id)
 		c2d.stroke();
 	}
 }
+
+function calcDrawOrder()
+{
+	// Wall indices in order of when they'll be drawn. Later in
+	// the list means drawn later, which means the wall is closer.
+	var drawOrder = [];
+	
+	// Outer loop goes through each wall.
+	for (var i = 0; i < walls.length; i++)
+	{
+		// If the wall is completely behind the player, don't bother.
+		if (wallIsBehindPlayer(walls[i]))
+			continue;
+			
+		// Decide where to place this wall in the current draw order list.
+		// We take advantage of the fact that the existing list is already
+		// sorted by draw order.
+		var placed = false;
+		for (var j = 0; j < drawOrder.length; j++)
+		{
+			var obsc = calcWallObscurity(walls[i], walls[drawOrder[j]]);
+			
+			// If our wall of interest is obscured by this wall in the draw
+			// order, stop here. We place our current wall before this wall.
+			if (obsc == -1)
+			{
+				drawOrder.splice(j, 0, i);
+				placed = true;
+				break;
+			}
+		}
+		
+		// If the wall didn't get placed, put it at the end.
+		if (!placed)
+		{
+			drawOrder.push(i);
+		}
+	}
+	
+	return drawOrder;
+}
+
+/**
+ * Determines whether one wall obscures another by being in front
+ * of it. Returns 1 if wall1 obscures wall2, -1 if wall2 obscures
+ * wall1, and 0 if the walls don't obscure each other.
+ */
+function calcWallObscurity(wall1, wall2)
+{
+	// Get azimuth angles to each wallpoint.
+	var aw1p1 = azimuthAngle(player.x, player.y, player.dir, wall1.x1, wall1.y1);
+	var aw1p2 = azimuthAngle(player.x, player.y, player.dir, wall1.x2, wall1.y2);
+	var aw2p1 = azimuthAngle(player.x, player.y, player.dir, wall2.x1, wall2.y1);
+	var aw2p2 = azimuthAngle(player.x, player.y, player.dir, wall2.x2, wall2.y2);
+	
+	var output = calcWallObs_Check(aw1p1, aw2p1, aw2p2, wall1, wall2);
+	if (output != 0) return output;
+	
+	output = calcWallObs_Check(aw1p2, aw2p1, aw2p2, wall1, wall2);
+	if (output != 0) return output;
+	
+	output = calcWallObs_Check(aw2p1, aw1p1, aw1p2, wall2, wall1);
+	if (output != 0) return -output;
+	
+	output = calcWallObs_Check(aw2p2, aw1p1, aw1p2, wall2, wall1);
+	return -output;
+}
+
+function calcWallObs_Check(a11, a21, a22, wall1, wall2)
+{
+	if ((a11 <= a21 && a11 >= a22) || (a11 >= a21 && a11 <= a22))
+	{
+		// Get the distances to wall 1 point 1, and where the line extended through there meets wall 2.
+		var dw1 = distPoints(player.x, player.y, wall1.x1, wall1.y1);
+		var intersectw2 = intersectLineAngle(player.x, player.y, player.dir + a11, wall2.x1, wall2.y1, wall2.x2, wall2.y2);
+		var dw2 = distPoints(player.x, player.y, intersectw2.x, intersectw2.y);
+		
+		return dw1 > dw2 ? -1 : 1;
+	}
+	
+	return 0;
+}
+
+/**
+ * Determines if a wall is completely behind the player. Since the
+ * engine does not allow fields of view greater than 180 degrees,
+ * a wall being behind the player means there is no way we have to
+ * draw it.
+ */
+function wallIsBehindPlayer(wall)
+{
+	var dx1 = wall.x1 - player.x;
+	var dy1 = wall.y1 - player.y;
+	var dx2 = wall.x2 - player.x;
+	var dy2 = wall.y2 - player.y;
+	
+	dx1 *= Math.cos(player.dir);
+	dy1 *= Math.sin(player.dir);
+	dx2 *= Math.cos(player.dir);
+	dy2 *= Math.sin(player.dir);
+	
+	return dx1 + dy1 <= 0 && dx2 + dy2 <= 0;
+}
+
+// ***************************************
+//             PLAYER INPUT
+// ***************************************
 
 /**
  * Handle keys down.
@@ -320,13 +458,12 @@ function worldCoordsToViewAngles(x, y, z)
 	var result = {azimuth: 0, elevation: 0};
 	
 	// Get the horizontal angle from the center of view (positive = to the right).
-	var abs_angle = Math.atan2(player.y - y, player.x - x) + PI;
-	result.azimuth = Math.atan2(Math.sin(abs_angle - player.dir), Math.cos(abs_angle - player.dir));
+	result.azimuth = azimuthAngle(player.x, player.y, player.dir, x, y);
 	
 	// Get the vertical angle (based on player height and distance, positive = down).
 	var distToWall = flags.SimpleDistance ?
 		distPoints(player.x, player.y, x, y) :
-		distToWallPoint(player.x, player.y, player.dir, x, y);
+		distPointsInDirection(player.x, player.y, player.dir, x, y);
 	result.elevation = Math.atan((player.height - z) / distToWall);
 	
 	return result;
@@ -354,9 +491,12 @@ function correctOutOfViewAngles(viewAngles, wall, z)
 		// the wall. Then, calculate the azimuth angle from the center of the player's
 		// vision to that point on the wall.
 		var wallpoint = intersectLineAngle(player.x, player.y, fovdir, wall.x1, wall.y1, wall.x2, wall.y2);
-		var wallpoint_abs_angle = Math.atan2(player.y - wallpoint.y, player.x - wallpoint.x) + PI;
-		var wallpoint_azimuth = Math.atan2(Math.sin(wallpoint_abs_angle - player.dir), Math.cos(wallpoint_abs_angle - player.dir));
 		
+		if (wallpoint == null)
+			return viewAngles;
+		
+		var wallpoint_azimuth = azimuthAngle(player.x, player.y, player.dir, wallpoint.x, wallpoint.y);
+	
 		// If the azimuth is greater than it should be, we used the wrong side of the
 		// player's vision. Re-calculate using the other side. Note: we divide by 1.999
 		// instead of 2 here because floats aren't that sick.
@@ -418,7 +558,7 @@ function distPoints(x1, y1, x2, y2)
  * account for Y positions of points at all). This function does
  * a similar calculation but for any direction.
  */
-function distToWallPoint(px, py, pdir, wx, wy)
+function distPointsInDirection(px, py, pdir, wx, wy)
 {
 	// Define vector from player to wallpoint.
 	var dx = wx - px;
@@ -484,4 +624,10 @@ function intersectLineAngle(ax, ay, adir, lx1, ly1, lx2, ly2)
 	
 	// Otherwise, do a standard point-slope intersection.
 	return intersectLines(ax, ay, Math.tan(adir), lx1, ly1, lm);
+}
+
+function azimuthAngle(px, py, pdir, x, y)
+{
+	var abs_angle = Math.atan2(py - y, px - x) + PI;
+	return Math.atan2(Math.sin(abs_angle - pdir), Math.cos(abs_angle - pdir));
 }
