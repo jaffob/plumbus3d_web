@@ -42,8 +42,8 @@ var player =
 
 // Define the array of walls.
 var walls = [
-{x1:200,y1:200,x2:400,y2:200,h:100,color:"#FF0000"},
-{x1:500,y1:200,x2:500,y2:400,h:100,color:"#00FF00"},
+{x1:200,y1:200,x2:300,y2:200,h:100,color:"#FF0000"},
+//{x1:500,y1:200,x2:500,y2:400,h:100,color:"#00FF00"},
 {x1:400,y1:200,x2:200,y2:400,h:100,color:"#0000FF"},
 ];
 
@@ -271,7 +271,7 @@ function calcDrawOrder()
 		for (var j = 0; j < drawOrder.length; j++)
 		{
 			var obsc = calcWallObscurity(walls[i], walls[drawOrder[j]]);
-			
+
 			// If our wall of interest is obscured by this wall in the draw
 			// order, stop here. We place our current wall before this wall.
 			if (obsc == -1)
